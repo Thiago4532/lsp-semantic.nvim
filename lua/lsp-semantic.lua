@@ -98,33 +98,6 @@ local function parse_data(data, types, modifiers_tbl)
     return tbl
 end
 
-local function parse_data_modified(data, types, modifiers_tbl, was_modified)
-    local line = 0
-    local start = 0
-    local length = 0
-    local type = ""
-
-    local tbl = {}
-    for i=1,#data,5 do
-        line = data[i] + line
-        start = data[i+1] + (data[i] == 0 and start or 0)
-        length = data[i+2]
-        type = types[data[i+3] + 1]
-
-        if was_modified[line] then
-            local modifiers = parse_modifiers(data[i+4], modifiers_tbl)
-            tbl[#tbl + 1] = {
-                line = line,
-                start = start,
-                length = length,
-                type = type,
-                modifiers = modifiers
-            }
-        end
-    end
-    return tbl
-end
-
 local previous_result_buffer = {}
 
 local types_highlight = {
@@ -174,100 +147,6 @@ local function lsp_handler_full(_, result, ctx, _)
     -- print("Full:", (vim.loop.hrtime() - clock) / 1e6)
 end
 
-local function lsp_handler_full_delta(_, result, ctx, _)
-    if result.data then
-        return lsp_handler_full(_, result, ctx, _);
-    end
-    local clock = vim.loop.hrtime()
-    local client_id = ctx.client_id
-    local client = vim.lsp.get_client_by_id(client_id)
-    local bufnr = ctx.bufnr
-    if not client or not result.edits then
-        return
-    end
-
-    local edits = result.edits
-    local prev = previous_result_buffer[bufnr].data
-
-    table.sort(edits, function(a, b)
-        return a.start < b.start
-    end)
-
-    local data = {}
-    local was_modified = {}
-    local line,cnt = 0,4
-    local offset = 1
-
-    for _,edit in ipairs(edits) do
-        while offset <= edit.start do
-            data[#data + 1] = prev[offset]
-            cnt = cnt + 1
-            if cnt == 5 then
-                line = line + data[#data]
-                cnt = 0
-            end
-
-            offset = offset + 1
-        end
-        if edit.deleteCount then
-            offset = offset + edit.deleteCount
-        end
-
-        for _,v in ipairs(edit.data) do
-            data[#data + 1] = v
-            cnt = cnt + 1
-            if cnt == 5 then
-                line = line + data[#data]
-                cnt = 0
-            end
-
-            was_modified[line] = true
-        end
-    end
-    while offset <= #prev do
-        data[#data + 1] = prev[offset]
-        offset = offset + 1
-    end
-
-    previous_result_buffer[bufnr] = {
-        data = data,
-        resultId = result.resultId,
-        clientId = client_id
-    }
-
-    local types = client.resolved_capabilities.semantic_tokens_types
-    local modifiers = client.resolved_capabilities.semantic_tokens_modifiers
-    local symbols = parse_data_modified(data, types, modifiers, was_modified)
-    local ns = api.nvim_create_namespace("lsp-semantic-namespace")
-
-    if #symbols == 0 then
-        return
-    end
-
-    -- Clear highlight in range
-    local line_start, line_end = symbols[1].line, symbols[1].line + 1
-    for _,symbol in ipairs(symbols) do
-        if symbol.line <= line_end then
-            line_end = symbol.line + 1
-        else
-            api.nvim_buf_clear_namespace(bufnr, ns, line_start, line_end)
-            line_start, line_end = symbol.line, symbol.line + 1
-        end
-    end
-    api.nvim_buf_clear_namespace(bufnr, ns, line_start, line_end)
-
-    -- Highlight symbols
-    for _,symbol in ipairs(symbols) do
-        local line = symbol.line
-        local col_start = symbol.start
-        local col_end = col_start + symbol.length
-        local hl = types_highlight[symbol.type] or "LspSemanticUnknown"
-
-        api.nvim_buf_add_highlight(bufnr, ns, hl, line, col_start, col_end)
-    end
-    print("Delta:", (vim.loop.hrtime() - clock) / 1e6)
-end
-
 local function dump_symbols()
     local bufnr = api.nvim_get_current_buf()
 
@@ -314,25 +193,17 @@ local function dump_cursor()
     return
 end
 
-function highlight_file()
-    lsp.buf_request(0, "textDocument/semanticTokens/full", {
+function highlight_buffer(bufnr)
+    lsp.buf_request(bufnr or 0, "textDocument/semanticTokens/full", {
         textDocument = util.make_text_document_params()
     })
 end
 
-function highlight_file_delta()
-    local bufnr = api.nvim_get_current_buf()
-
-    if not previous_result_buffer[bufnr] then
-        lsp.buf_request(0, "textDocument/semanticTokens/full", {
-            textDocument = util.make_text_document_params()
-        })
-    else
-        lsp.buf_request(0, "textDocument/semanticTokens/full/delta", {
-            textDocument = util.make_text_document_params(),
-            previousResultId = previous_result_buffer[bufnr].resultId
-        })
-    end
+local function on_attach(_, bufnr)
+    highlight_buffer(bufnr)
+    api.nvim_buf_call(bufnr, function()
+        api.nvim_command([[autocmd CursorHold,InsertLeave <buffer> lua require'lsp-semantic'.highlight_buffer()]])
+    end)
 end
 
 local function setup()
@@ -340,11 +211,12 @@ local function setup()
     protocol.resolve_capabilities = resolve_capabilities
 
     lsp.handlers["textDocument/semanticTokens/full"] = lsp_handler_full
-    lsp.handlers["textDocument/semanticTokens/full/delta"] = lsp_handler_full_delta
 end
 
 return {
     setup = setup,
+    on_attach = on_attach,
+    highlight_buffer = highlight_buffer,
     dump_symbols = dump_symbols,
     dump_cursor = dump_cursor
 }
