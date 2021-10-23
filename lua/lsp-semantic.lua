@@ -1,17 +1,15 @@
 local vim = vim
 local api, lsp = vim.api, vim.lsp
 local util, protocol = lsp.util, lsp.protocol
-local bit = require'bit'
+local bit = require'lsp-semantic/util/bit'
 
 local function err_message(...)
     vim.notify(table.concat(vim.tbl_flatten{...}), vim.log.levels.ERROR)
     api.nvim_command("redraw")
 end
 
-local old_make_client_capabilities = protocol.make_client_capabilities;
-local function make_client_capabilities()
-    local tbl = old_make_client_capabilities()
-    tbl['textDocument'].semanticTokens = {
+local function modify_capabilities(capabilities)
+    capabilities['textDocument'].semanticTokens = {
         requests = {
             range = false,
             full = {
@@ -20,7 +18,6 @@ local function make_client_capabilities()
         },
         multilineTokenSupport = false
     }
-    return tbl
 end
 
 -- TODO: Support more than 23 modifiers
@@ -34,10 +31,7 @@ local function modifiers_to_bit_table(modifiers)
     return tbl
 end
 
-local old_resolve_capabilities = protocol.resolve_capabilities
-local function resolve_capabilities(server_capabilities)
-    local tbl = old_resolve_capabilities(server_capabilities)
-
+local function modify_resolved_capabilities(server_capabilities, tbl)
     local smp = server_capabilities.semanticTokensProvider
     if smp then
         tbl['semantic_tokens'] = {
@@ -56,8 +50,6 @@ local function resolve_capabilities(server_capabilities)
         tbl['semantic_tokens_types'] = {}
         tbl['semantic_tokens_modifiers'] = {}
     end
-
-    return tbl
 end
 
 local function parse_modifiers(m, modifiers_tbl)
@@ -118,11 +110,10 @@ local types_highlight = {
 }
 
 local function lsp_handler_full(_, result, ctx, _)
-    -- local clock = vim.loop.hrtime()
     local client_id = ctx.client_id
-    local client = vim.lsp.get_client_by_id(client_id)
+    local client = lsp.get_client_by_id(client_id)
     local bufnr = ctx.bufnr
-    if not client or not result.data then 
+    if not client or not result or not result.data then 
         return
     end
     previous_result_buffer[bufnr] = result
@@ -144,7 +135,6 @@ local function lsp_handler_full(_, result, ctx, _)
 
         api.nvim_buf_add_highlight(bufnr, ns, hl, line, col_start, col_end)
     end
-    -- print("Full:", (vim.loop.hrtime() - clock) / 1e6)
 end
 
 local function dump_symbols()
@@ -157,7 +147,7 @@ local function dump_symbols()
     end
 
     local client_id = result.clientId 
-    local client = vim.lsp.get_client_by_id(client_id)
+    local client = lsp.get_client_by_id(client_id)
     if not client then
         err_message(string.format("dump_symbols: client %d is not active anymore", client_id))
         return
@@ -193,29 +183,46 @@ local function dump_cursor()
     return
 end
 
-function highlight_buffer(bufnr)
+local function highlight_buffer(bufnr)
     lsp.buf_request(bufnr or 0, "textDocument/semanticTokens/full", {
         textDocument = util.make_text_document_params()
     })
 end
 
-local function on_attach(_, bufnr)
-    highlight_buffer(bufnr)
-    api.nvim_buf_call(bufnr, function()
-        api.nvim_command([[autocmd CursorHold,InsertLeave <buffer> lua require'lsp-semantic'.highlight_buffer()]])
-    end)
-end
+local function before_init(initialize_params, config)
+    local on_init = config.on_init
+    config.on_init = function(client, result)
+        modify_resolved_capabilities(client.server_capabilities, client.resolved_capabilities)
 
-local function setup()
-    protocol.make_client_capabilities = make_client_capabilities
-    protocol.resolve_capabilities = resolve_capabilities
+        client.handlers["textDocument/semanticTokens/full"] = lsp_handler_full
 
-    lsp.handlers["textDocument/semanticTokens/full"] = lsp_handler_full
+        if on_init then
+            return on_init(client, result)
+        end
+    end
+
+    local on_attach = config.on_attach
+    config.on_attach = function(client, bufnr)
+        highlight_buffer(bufnr)
+        api.nvim_buf_call(bufnr, function()
+            api.nvim_command([[autocmd CursorHold,InsertLeave <buffer> lua require'lsp-semantic'.highlight_buffer()]])
+        end)
+        api.nvim_buf_attach(bufnr, false, {
+            on_detach = function()
+                previous_result_buffer[bufnr] = nil
+            end
+        })
+
+        if on_attach then
+            return on_attach(client, bufnr)
+        end
+    end
+
+    return modify_capabilities(initialize_params.capabilities)
 end
 
 return {
-    setup = setup,
-    on_attach = on_attach,
+    before_init = before_init,
     highlight_buffer = highlight_buffer,
     dump_symbols = dump_symbols,
     dump_cursor = dump_cursor
