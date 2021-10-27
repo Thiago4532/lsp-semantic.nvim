@@ -1,7 +1,7 @@
 local vim = vim
 local api, lsp = vim.api, vim.lsp
 local util, protocol = lsp.util, lsp.protocol
-local bit = require'lsp-semantic/util/bit'
+local bit = bit
 
 local function err_message(...)
     vim.notify(table.concat(vim.tbl_flatten{...}), vim.log.levels.ERROR)
