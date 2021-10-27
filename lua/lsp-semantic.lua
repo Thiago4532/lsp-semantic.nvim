@@ -119,6 +119,10 @@ local function lsp_handler_full(_, result, ctx, _)
     previous_result_buffer[bufnr] = result
     previous_result_buffer[bufnr].clientId = client_id
 
+    local custom_types = client.config.semantic_highlight
+                         and client.config.semantic_highlight.custom_types
+                         or {}
+
     local data = result.data
     local types = client.resolved_capabilities.semantic_tokens_types
     local modifiers = client.resolved_capabilities.semantic_tokens_modifiers
@@ -131,9 +135,11 @@ local function lsp_handler_full(_, result, ctx, _)
         local line = symbol.line
         local col_start = symbol.start
         local col_end = col_start + symbol.length
-        local hl = types_highlight[symbol.type] or "LspSemanticUnknown"
+        local hl = custom_types[symbol.type] or types_highlight[symbol.type]
 
-        api.nvim_buf_add_highlight(bufnr, ns, hl, line, col_start, col_end)
+        if hl then
+            api.nvim_buf_add_highlight(bufnr, ns, hl, line, col_start, col_end)
+        end
     end
 end
 
