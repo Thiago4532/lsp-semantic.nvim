@@ -14,6 +14,4 @@ function mt:__index(key)
     return configs[key]
 end
 
-thiago = mt
-
 return setmetatable({}, mt)
