@@ -200,8 +200,8 @@ local function enable_buffer(bufnr)
     api.nvim_buf_call(bufnr, function()
         vim.cmd[[
         augroup lsp-semantic
-            au!
-            au CursorHold,InsertLeave <buffer> lua require'lsp-semantic'.highlight_buffer()
+            au! * <buffer>
+            au! CursorHold,InsertLeave <buffer> lua require'lsp-semantic'.highlight_buffer()
         augroup END
         ]]
     end)
@@ -211,7 +211,7 @@ local function disable_buffer(bufnr)
     api.nvim_buf_call(bufnr, function()
         vim.cmd[[
         augroup lsp-semantic
-            au!
+            au! * <buffer>
         augroup END
         ]]
     end)
