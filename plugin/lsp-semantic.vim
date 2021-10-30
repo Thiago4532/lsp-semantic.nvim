@@ -4,6 +4,8 @@ endif
 let g:loaded_lsp_semantic = 1
 
 "" Commands
+command LspSemanticEnable lua require'lsp-semantic/commands'.cmd_enable()
+command LspSemanticDisable lua require'lsp-semantic/commands'.cmd_disable()
 command LspSemanticDumpSymbols lua require'lsp-semantic/commands'.cmd_dump_symbols()
 command LspSemanticDumpCursor lua require'lsp-semantic/commands'.cmd_dump_cursor()
 

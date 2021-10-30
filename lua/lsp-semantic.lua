@@ -195,6 +195,31 @@ local function highlight_buffer(bufnr)
     })
 end
 
+local function enable_buffer(bufnr)
+    highlight_buffer(bufnr)
+    api.nvim_buf_call(bufnr, function()
+        vim.cmd[[
+        augroup lsp-semantic
+            au!
+            au CursorHold,InsertLeave <buffer> lua require'lsp-semantic'.highlight_buffer()
+        augroup END
+        ]]
+    end)
+end
+
+local function disable_buffer(bufnr)
+    api.nvim_buf_call(bufnr, function()
+        vim.cmd[[
+        augroup lsp-semantic
+            au!
+        augroup END
+        ]]
+    end)
+    local ns = api.nvim_create_namespace("lsp-semantic-namespace")
+    api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
+    previous_result_buffer[bufnr] = nil
+end
+
 local function before_init(initialize_params, config)
     local on_init = config.on_init
     config.on_init = function(client, result)
@@ -209,10 +234,7 @@ local function before_init(initialize_params, config)
 
     local on_attach = config.on_attach
     config.on_attach = function(client, bufnr)
-        highlight_buffer(bufnr)
-        api.nvim_buf_call(bufnr, function()
-            api.nvim_command([[autocmd CursorHold,InsertLeave <buffer> lua require'lsp-semantic'.highlight_buffer()]])
-        end)
+        enable_buffer(bufnr)
         api.nvim_buf_attach(bufnr, false, {
             on_detach = function()
                 previous_result_buffer[bufnr] = nil
@@ -229,6 +251,8 @@ end
 
 return {
     before_init = before_init,
+    enable_buffer = enable_buffer,
+    disable_buffer = disable_buffer,
     highlight_buffer = highlight_buffer,
     dump_symbols = dump_symbols,
     dump_cursor = dump_cursor
