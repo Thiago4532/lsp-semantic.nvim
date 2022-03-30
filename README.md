@@ -1,6 +1,8 @@
 # lsp-semantic
 Semantic Tokens support for NeoVim's builtin LSP
 
+![image](https://user-images.githubusercontent.com/19158283/160946727-c0b0c14e-109b-4e8f-8baf-9ea60863cbbc.png)
+
 ## Setup
 Add this function to your LSP configuration:
 
