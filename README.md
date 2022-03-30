@@ -9,3 +9,10 @@ require'lspconfig'.clangd.setup {
     before_init = require'lsp-semantic'.before_init,
 }
 ```
+
+## Time between updates
+
+Currently, this plugin is using ```CursorHold``` event to update the buffer, if you want to decrease the time between updates, you must decrease the ```updatetime``` (see ```:h CursorHold``` and ```:h updatetime```).
+```vim
+set updatetime=300
+```
