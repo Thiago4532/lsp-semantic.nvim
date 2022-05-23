@@ -31,24 +31,29 @@ local function modifiers_to_bit_table(modifiers)
     return tbl
 end
 
-local function modify_resolved_capabilities(server_capabilities, tbl)
+local function gen_semantic_token_capabilities(client)
+    client.lsp_semantic_extra = {}
+
+    local server_capabilities = client.server_capabilities
+    local lsp_semantic_extra = client.lsp_semantic_extra
+
     local smp = server_capabilities.semanticTokensProvider
     if smp then
-        tbl['semantic_tokens'] = {
+        lsp_semantic_extra['semantic_tokens'] = {
             full = not not smp.full,
             full_delta = smp.full and smp.full.delta,
             range = not not smp.range,
         }
-        tbl['semantic_tokens_types'] = smp.legend and smp.legend.tokenTypes or {}
-        tbl['semantic_tokens_modifiers'] = modifiers_to_bit_table(smp.legend and smp.legend.tokenModifiers or {})
+        lsp_semantic_extra['semantic_tokens_types'] = smp.legend and smp.legend.tokenTypes or {}
+        lsp_semantic_extra['semantic_tokens_modifiers'] = modifiers_to_bit_table(smp.legend and smp.legend.tokenModifiers or {})
     else
-        tbl['semantic_tokens'] = {
+        lsp_semantic_extra['semantic_tokens'] = {
             full = false,
             full_delta = false,
             range = false,
         }
-        tbl['semantic_tokens_types'] = {}
-        tbl['semantic_tokens_modifiers'] = {}
+        lsp_semantic_extra['semantic_tokens_types'] = {}
+        lsp_semantic_extra['semantic_tokens_modifiers'] = {}
     end
 end
 
@@ -124,8 +129,8 @@ local function lsp_handler_full(_, result, ctx, _)
                          or {}
 
     local data = result.data
-    local types = client.resolved_capabilities.semantic_tokens_types
-    local modifiers = client.resolved_capabilities.semantic_tokens_modifiers
+    local types = client.lsp_semantic_extra.semantic_tokens_types
+    local modifiers = client.lsp_semantic_extra.semantic_tokens_modifiers
 
     local symbols = parse_data(data, types, modifiers)
     local ns = api.nvim_create_namespace("lsp-semantic-namespace")
@@ -160,8 +165,8 @@ local function dump_symbols()
     end
 
     local data = result.data
-    local types = client.resolved_capabilities.semantic_tokens_types
-    local modifiers = client.resolved_capabilities.semantic_tokens_modifiers
+    local types = client.lsp_semantic_extra.semantic_tokens_types
+    local modifiers = client.lsp_semantic_extra.semantic_tokens_modifiers
     return parse_data(data, types, modifiers)
 end
 
@@ -223,7 +228,7 @@ end
 local function before_init(initialize_params, config)
     local on_init = config.on_init
     config.on_init = function(client, result)
-        modify_resolved_capabilities(client.server_capabilities, client.resolved_capabilities)
+        gen_semantic_token_capabilities(client)
 
         client.handlers["textDocument/semanticTokens/full"] = lsp_handler_full
 
