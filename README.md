@@ -1,6 +1,8 @@
 # lsp-semantic
 Semantic Tokens support for NeoVim's builtin LSP
 
+## WARNING: Semantic Tokens are now [builtin](https://github.com/neovim/neovim/pull/21100) in NeoVim, this plugin is not necessary anymore!
+
 ## Introduction
 The 3.16 version of the Language Server Protocol added support for [Semantic Tokens](https://microsoft.github.io/language-server-protocol/specification). You can use them to get semantic highlight using the LSP on your text editor, but currently there's no native support in NeoVim for Semantic Tokens, so I've created this plugin to get semantic highlight to work on NeoVim.
 
